@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import json
 from langchain.vectorstores import FAISS
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.schema import Document
 import os
 
@@ -66,14 +66,14 @@ def load_case_memory():
         )
         for r in data
     ]
-    return FAISS.from_documents(cases, OpenAIEmbeddings())
+    return FAISS.from_documents(cases, HuggingFaceEmbeddings())
 
 retriever = load_case_memory().as_retriever(search_kwargs={"k": 5})
 
 # === General Chat Mode ===
 if mode == "General Chat":
     st.subheader("💬 Ask any question about breast cancer")
-    user_question = st.text_input("Type your question here...")
+    user_question = st.text_input("Type your question here:")
     if user_question:
         reply = query_llama3(user_question)
         st.markdown("### 🧠 Answer")
@@ -81,15 +81,14 @@ if mode == "General Chat":
 
 # === Detection Support Mode ===
 elif mode == "Detection Support":
-    # Detection Questions with Examples
     questions = [
         "How old are you? (e.g., 45, 52, 60)",
-        "Please describe any symptoms you're experiencing in your breasts. (e.g., lump, pain, nipple discharge, swelling, shape change)",
-        "Do you have any family history of breast cancer? (e.g., Yes, my mother had it. / No known history)",
-        "Have you ever had a biopsy or mammogram? If yes, what were the results? (e.g., Yes, mammogram showed dense breast tissue)",
-        "Do you know your breast density (Low, Medium, High)? (e.g., My doctor said it’s high)",
-        "What is your hormone receptor status if known? (e.g., ER+, PR-, HER2+ or I don't know)",
-        "Is there anything else you’d like to share that could be relevant? (e.g., skin dimpling, previous DCIS, recent weight loss)"
+        "Please describe any symptoms you're experiencing in your breasts.",
+        "Do you have any family history of breast cancer?",
+        "Have you had a biopsy or mammogram? What were the results?",
+        "Do you know your breast density? (Low, Medium, High)",
+        "What is your hormone receptor status? (ER, PR, HER2)",
+        "Any other relevant information you'd like to share?"
     ]
 
     if "qa_pairs" not in st.session_state:
@@ -103,10 +102,9 @@ elif mode == "Detection Support":
         if st.button("Next"):
             st.session_state.qa_pairs.append((question, answer))
             st.session_state.q_index += 1
-            st.experimental_rerun()
+            st.rerun()
     else:
-        st.success("Thank you! Analyzing your responses...")
-
+        st.success("Analyzing your responses...")
         chat_history = "\n".join([f"{q} {a}" for q, a in st.session_state.qa_pairs])
         retrieved = retriever.get_relevant_documents(chat_history)
         examples = "\n".join([doc.page_content for doc in retrieved])
@@ -132,17 +130,13 @@ Now, provide a summary of the patient's risk and recommend what they should do n
         new_case["llm_diagnosis"] = result
         pd.DataFrame([new_case]).to_csv("chat_logs.csv", mode="a", header=not os.path.exists("chat_logs.csv"), index=False)
 
-        st.balloons()
-        st.markdown("---")
         if st.button("Start Over"):
             st.session_state.qa_pairs = []
             st.session_state.q_index = 0
-            st.experimental_rerun()
+            st.rerun()
 
-# === Sidebar info ===
+# === Sidebar Info ===
 st.sidebar.title("About")
 st.sidebar.info("""
-This chatbot helps assess the likelihood of breast cancer based on your symptoms and history or answer general medical questions.
-
-Powered by LLaMA 3.3 via OpenRouter + RAG (Retrieval-Augmented Generation).
+This chatbot helps assess breast cancer risk from your responses, and answers general questions using LLaMA 3.3 with RAG.
 """)
